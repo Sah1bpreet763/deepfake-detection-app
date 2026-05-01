@@ -835,26 +835,46 @@ def load_model():
     ]
 
     import tensorflow as tf
+    import h5py, json
 
     for p, url in zip(model_paths, model_urls):
-        # Remove corrupted/incomplete downloads
-        if os.path.exists(p) and os.path.getsize(p) < 1_000_000:  # < 1MB = corrupted
+        # Remove corrupted files (< 1MB)
+        if os.path.exists(p) and os.path.getsize(p) < 1_000_000:
             os.remove(p)
 
         if not os.path.exists(p):
             try:
-                with st.spinner(f"Downloading {p} from Google Drive..."):
-                    gdown.download(url, p, quiet=False, fuzzy=True)  # fuzzy=True bypasses virus-scan page
+                with st.spinner(f"Downloading {p}..."):
+                    gdown.download(url, p, quiet=False, fuzzy=True)
             except Exception as e:
                 st.warning(f"Download failed for {p}: {e}")
                 continue
 
-        if os.path.exists(p):
-            try:
-                model = tf.keras.models.load_model(p, compile=False)  # compile=False skips DTypePolicy
-                return model, p
-            except Exception as e:
-                st.warning(f"Could not load {p}: {e}")
+        if not os.path.exists(p):
+            continue
+
+        # ── Attempt 1: standard load ──────────────────────────────
+        try:
+            model = tf.keras.models.load_model(p, compile=False)
+            return model, p
+        except Exception as e1:
+            pass
+
+        # ── Attempt 2: patch batch_shape in the h5 config ─────────
+        try:
+            with h5py.File(p, 'r+') as f:
+                if 'model_config' in f.attrs:
+                    cfg = f.attrs['model_config']
+                    if isinstance(cfg, bytes):
+                        cfg = cfg.decode('utf-8')
+                    cfg = cfg.replace('"batch_shape"', '"shape"') \
+                             .replace("'batch_shape'", "'shape'")
+                    f.attrs['model_config'] = cfg.encode('utf-8')
+
+            model = tf.keras.models.load_model(p, compile=False)
+            return model, p
+        except Exception as e2:
+            st.warning(f"Could not load {p}: {e2}")
 
     return None, None
 
