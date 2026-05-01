@@ -835,21 +835,29 @@ def load_model():
     ]
 
     import tensorflow as tf
+    from tensorflow.keras.layers import InputLayer
+
+    # Patch: accept & ignore 'batch_shape' so old models load on new TF
+    class LegacyInputLayer(InputLayer):
+        def __init__(self, *args, **kwargs):
+            kwargs.pop('batch_shape', None)
+            super().__init__(*args, **kwargs)
 
     for p, url in zip(model_paths, model_urls):
-        # Download from Drive if not already cached locally
         if not os.path.exists(p):
             try:
-                with st.spinner(f"Downloading model {p} from Google Drive..."):
-                    gdown.download(url, p, quiet=False)  # ← url=source, p=destination
+                with st.spinner(f"Downloading {p} from Google Drive..."):
+                    gdown.download(url, p, quiet=False)
             except Exception as e:
                 st.warning(f"Download failed for {p}: {e}")
-                continue  # try next model
+                continue
 
-        # Now try to load it
         if os.path.exists(p):
             try:
-                model = tf.keras.models.load_model(p)
+                model = tf.keras.models.load_model(
+                    p,
+                    custom_objects={"InputLayer": LegacyInputLayer}
+                )
                 return model, p
             except Exception as e:
                 st.warning(f"Could not load {p}: {e}")
