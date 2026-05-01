@@ -1166,7 +1166,7 @@ elif page == "🔍  Detection":
             else:
                 st.markdown('<div class="img-frame">', unsafe_allow_html=True)
 
-            st.image(img, use_container_width=True)
+            st.image(img, use_column_width=True)
 
             st.markdown("""
                 <div class="img-corner tl"></div>
