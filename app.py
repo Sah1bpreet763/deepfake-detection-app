@@ -835,35 +835,28 @@ def load_model():
     ]
 
     import tensorflow as tf
-    from tensorflow.keras.layers import InputLayer
-
-    # Patch: accept & ignore 'batch_shape' so old models load on new TF
-    class LegacyInputLayer(InputLayer):
-        def __init__(self, *args, **kwargs):
-            kwargs.pop('batch_shape', None)
-            super().__init__(*args, **kwargs)
 
     for p, url in zip(model_paths, model_urls):
+        # Remove corrupted/incomplete downloads
+        if os.path.exists(p) and os.path.getsize(p) < 1_000_000:  # < 1MB = corrupted
+            os.remove(p)
+
         if not os.path.exists(p):
             try:
                 with st.spinner(f"Downloading {p} from Google Drive..."):
-                    gdown.download(url, p, quiet=False)
+                    gdown.download(url, p, quiet=False, fuzzy=True)  # fuzzy=True bypasses virus-scan page
             except Exception as e:
                 st.warning(f"Download failed for {p}: {e}")
                 continue
 
         if os.path.exists(p):
             try:
-                model = tf.keras.models.load_model(
-                    p,
-                    custom_objects={"InputLayer": LegacyInputLayer}
-                )
+                model = tf.keras.models.load_model(p, compile=False)  # compile=False skips DTypePolicy
                 return model, p
             except Exception as e:
                 st.warning(f"Could not load {p}: {e}")
 
     return None, None
-
 
 def preprocess_image(img: Image.Image, size=(128, 128)) -> np.ndarray:
     img = img.convert("RGB").resize(size, Image.LANCZOS)
