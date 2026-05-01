@@ -3,6 +3,7 @@ import numpy as np
 from PIL import Image
 import time
 import os
+import gdown
 
 # ─── Page Config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -828,14 +829,23 @@ def load_model():
         'deepfake_mobilenet_model.h5',
         'deepfake_mobilenet_updated.h5',
     ]
-    for p in model_paths:
-        if os.path.exists(p):
-            try:
-                import tensorflow as tf
-                return tf.keras.models.load_model(p), p
-            except Exception as e:
-                st.warning(f"Could not load {p}: {e}")
-    return None, None
+    model_urls = ["https://drive.google.com/uc?id=1wcCdLdQXjqlovtvkBDsznMVZi9_Sxcjs",
+                  "https://drive.google.com/uc?id=1fRln-iCgZm_KPtot3xy7eshvfTw5DN37"]
+    
+    try: 
+        for p in model_paths:
+            if os.path.exists(p):
+                 with st.spinner("Downloading model..."):
+                    gdown.download(model_urls[model_paths.index(p)], model_urls[model_paths.index(p)], quiet=False)
+                
+            import tensorflow as tf
+            model = tf.keras.models.load_model(p)
+            return model, p
+        
+        
+    except Exception as e:
+        st.warning(f"Could not load {p}: {e}")
+        return None, None
 
 
 def preprocess_image(img: Image.Image, size=(128, 128)) -> np.ndarray:
