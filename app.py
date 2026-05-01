@@ -1109,6 +1109,7 @@ elif page == "🔍  Detection":
             </div>
         </div>
         """, unsafe_allow_html=True)
+        st.warning("Demo Mode: Model inference is simulated.")
 
     col_upload, col_result, col_specs = st.columns([1, 1.2, 0.9], gap="large")
 
