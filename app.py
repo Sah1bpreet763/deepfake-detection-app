@@ -829,23 +829,32 @@ def load_model():
         'deepfake_mobilenet_model.h5',
         'deepfake_mobilenet_updated.h5',
     ]
-    model_urls = ["https://drive.google.com/uc?id=1wcCdLdQXjqlovtvkBDsznMVZi9_Sxcjs",
-                  "https://drive.google.com/uc?id=1fRln-iCgZm_KPtot3xy7eshvfTw5DN37"]
-    
-    try: 
-        for p in model_paths:
-            if os.path.exists(p):
-                 with st.spinner("Downloading model..."):
-                    gdown.download(model_urls[model_paths.index(p)], model_urls[model_paths.index(p)], quiet=False)
-                
-            import tensorflow as tf
-            model = tf.keras.models.load_model(p)
-            return model, p
-        
-        
-    except Exception as e:
-        st.warning(f"Could not load {p}: {e}")
-        return None, None
+    model_urls = [
+        "https://drive.google.com/uc?id=1wcCdLdQXjqlovtvkBDsznMVZi9_Sxcjs",
+        "https://drive.google.com/uc?id=1fRln-iCgZm_KPtot3xy7eshvfTw5DN37",
+    ]
+
+    import tensorflow as tf
+
+    for p, url in zip(model_paths, model_urls):
+        # Download from Drive if not already cached locally
+        if not os.path.exists(p):
+            try:
+                with st.spinner(f"Downloading model {p} from Google Drive..."):
+                    gdown.download(url, p, quiet=False)  # ← url=source, p=destination
+            except Exception as e:
+                st.warning(f"Download failed for {p}: {e}")
+                continue  # try next model
+
+        # Now try to load it
+        if os.path.exists(p):
+            try:
+                model = tf.keras.models.load_model(p)
+                return model, p
+            except Exception as e:
+                st.warning(f"Could not load {p}: {e}")
+
+    return None, None
 
 
 def preprocess_image(img: Image.Image, size=(128, 128)) -> np.ndarray:
