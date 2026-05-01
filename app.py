@@ -835,17 +835,49 @@ def load_model():
     ]
 
     import tensorflow as tf
-    import h5py, json
+    import h5py, json, re
+
+    def patch_h5_config(filepath):
+        """Remove batch_shape/shape from InputLayer config in the h5 file."""
+        with h5py.File(filepath, 'r+') as f:
+            if 'model_config' not in f.attrs:
+                return
+            cfg = f.attrs['model_config']
+            if isinstance(cfg, bytes):
+                cfg = cfg.decode('utf-8')
+            # Parse and fix every InputLayer config
+            cfg_dict = json.loads(cfg)
+            def fix_layer(layer):
+                if isinstance(layer, dict):
+                    cls = layer.get('class_name', '')
+                    if cls == 'InputLayer':
+                        c = layer.get('config', {})
+                        c.pop('batch_shape', None)  # remove problematic key
+                        c.pop('shape', None)         # remove this too
+                        # ensure required keys exist
+                        if 'batch_input_shape' not in c:
+                            c['batch_input_shape'] = [None, 128, 128, 3]
+                        layer['config'] = c
+                    for v in layer.values():
+                        if isinstance(v, (dict, list)):
+                            fix_layer(v)
+                elif isinstance(layer, list):
+                    for item in layer:
+                        fix_layer(item)
+            fix_layer(cfg_dict)
+            patched = json.dumps(cfg_dict).encode('utf-8')
+            f.attrs['model_config'] = patched
 
     for p, url in zip(model_paths, model_urls):
-        # Remove corrupted files (< 1MB)
+        # Remove corrupted files (< 1MB means HTML error page was downloaded)
         if os.path.exists(p) and os.path.getsize(p) < 1_000_000:
             os.remove(p)
 
         if not os.path.exists(p):
             try:
                 with st.spinner(f"Downloading {p}..."):
-                    gdown.download(url, p, quiet=False, fuzzy=True)
+                    # fuzzy removed — use id= URL directly, works on all gdown versions
+                    gdown.download(url, p, quiet=False)
             except Exception as e:
                 st.warning(f"Download failed for {p}: {e}")
                 continue
@@ -853,28 +885,20 @@ def load_model():
         if not os.path.exists(p):
             continue
 
-        # ── Attempt 1: standard load ──────────────────────────────
+        # Attempt 1: standard load
         try:
             model = tf.keras.models.load_model(p, compile=False)
             return model, p
-        except Exception as e1:
+        except Exception:
             pass
 
-        # ── Attempt 2: patch batch_shape in the h5 config ─────────
+        # Attempt 2: patch the h5 config and retry
         try:
-            with h5py.File(p, 'r+') as f:
-                if 'model_config' in f.attrs:
-                    cfg = f.attrs['model_config']
-                    if isinstance(cfg, bytes):
-                        cfg = cfg.decode('utf-8')
-                    cfg = cfg.replace('"batch_shape"', '"shape"') \
-                             .replace("'batch_shape'", "'shape'")
-                    f.attrs['model_config'] = cfg.encode('utf-8')
-
+            patch_h5_config(p)
             model = tf.keras.models.load_model(p, compile=False)
             return model, p
-        except Exception as e2:
-            st.warning(f"Could not load {p}: {e2}")
+        except Exception as e:
+            st.warning(f"Could not load {p}: {e}")
 
     return None, None
 
